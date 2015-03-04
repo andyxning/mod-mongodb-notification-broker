@@ -1,0 +1,27 @@
+{
+  "name": "mod-mongodb-broker",
+  "types": ["module"],
+  "version": "0.1.0",
+  "homepage": "http://github.com/andyxning/mod-mongodb-broker",
+  "author": "Ning Xie",
+  "description": "Module used for Broker to relay broks received by Broker to a mongodb database",
+  "contributors": [
+    {
+      "name": "Ning Xie",
+      "email": "andy.xning@gmail.com"
+    }
+  ],
+  "repository": "https://github.com/andyxning/mod-mongodb-broker",
+  "keywords": [
+    "mod-mongodb-broker",
+    "module",
+    "broker",
+    "mongodb",
+    "mongo",
+    "database"
+  ],
+  "dependencies": {
+    "shinken": ">=1.4"
+  },
+  "license": "AGPL"
+}
