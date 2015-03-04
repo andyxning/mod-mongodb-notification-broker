@@ -18,7 +18,7 @@ Note: Replica set MongoDB instances is the recommended way to work with.
 * [with authenticate](http://docs.mongodb.org/manual/tutorial/deploy-replica-set-with-auth/)
 * [without authenticate](http://docs.mongodb.org/manual/tutorial/deploy-replica-set/)
 
-##### Configuration in mongodb-broker.cfg
+##### Configuration in mongodb-notification-broker.cfg
 > module_name     mongodb-notification-broker  
 > module_type     mongodb_notification_broker  
 > high_availability     true  
@@ -33,7 +33,7 @@ Note: Replica set MongoDB instances is the recommended way to work with.
 ##### MongoDB Stand alone
 * host:port
 
-##### Configuration in mongodb-broker.cfg
+##### Configuration in mongodb-notification-broker.cfg
 > module_name     mongodb_notification_broker  
 > module_type     mongodb_notification_broker  
 > high_availability     false  
