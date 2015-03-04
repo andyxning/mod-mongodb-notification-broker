@@ -191,7 +191,7 @@ class MongodbBroker(BaseModule):
     def _save(self, ref, ref_identity, notification):
         self._process_db_operation(self.notifications.insert, notification)
         if ref == 'service':
-            _id = '.'.join((ref_identity.get('host'),
+            _id = ','.join((ref_identity.get('host'),
                             ref_identity.get('service_description')))
             cursor = self._process_db_operation(self.services.find,
                                                 {'_id': _id})
