@@ -199,7 +199,9 @@ class MongodbBroker(BaseModule):
             _id = ref_identity.get('host')
             cursor = self._process_db_operation(self.hosts.find, {'_id': _id})
         
-        # if service find error, 'cursor' will be None 
+        # if service or host find error, 'cursor' will be None.
+        # then we can not make sure that whether specific host or service 
+        # exists. In order to not make data be wrong, we stop here.
         if cursor:
             if not cursor.count():
                 # if notification insert error, then '_id' will not be in it and we
@@ -229,7 +231,8 @@ class MongodbBroker(BaseModule):
                                                    {'$set': {'notification_ids': notification_ids}})
         else:
             logger.warn('[Mongodb-Notification-Broker] Update notification '
-                        'error. Notification id: %s' % _id)
+                        'success, link error. Notification id: %s' % _id)
+    
     
     # The main function of mongodb_broker
     def _do_loop_turn(self):
