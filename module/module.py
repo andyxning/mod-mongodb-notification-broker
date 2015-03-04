@@ -199,33 +199,37 @@ class MongodbBroker(BaseModule):
             _id = ref_identity.get('host')
             cursor = self._process_db_operation(self.hosts.find, {'_id': _id})
         
-        if not cursor.count():
-            # if notification insert error, then '_id' will not be in it and we
-            # then should ignore the notification.
-            ref_identity.setdefault('notification_ids',
-                                    [notification.get('_id')] if '_id' in notification else [])
-            ref_identity.setdefault('_id', _id)
-            
-            if ref == 'service':
-                self._process_db_operation(self.services.insert, ref_identity)
-            elif ref == 'host':
-                self._process_db_operation(self.hosts.insert, ref_identity)
-        else:
-            document = cursor[0]
-            notification_ids = document.get('notification_ids')
-            # if notification insert error, then '_id' will not be in it and we 
-            # then should ignore the notification
-            if '_id' in notification:
-                notification_ids.append(notification.get('_id'))
+        # if service find error, 'cursor' will be None 
+        if cursor:
+            if not cursor.count():
+                # if notification insert error, then '_id' will not be in it and we
+                # then should ignore the notification.
+                ref_identity.setdefault('notification_ids',
+                                        [notification.get('_id')] if '_id' in notification else [])
+                ref_identity.setdefault('_id', _id)
+                
                 if ref == 'service':
-                    self._process_db_operation(self.services.update,
-                                               {'_id': _id},
-                                               {'$set': {'notification_ids': notification_ids}})
+                    self._process_db_operation(self.services.insert, ref_identity)
                 elif ref == 'host':
-                    self._process_db_operation(self.hosts.update,
-                                               {'_id': _id},
-                                               {'$set': {'notification_ids': notification_ids}})
-    
+                    self._process_db_operation(self.hosts.insert, ref_identity)
+            else:
+                document = cursor[0]
+                notification_ids = document.get('notification_ids')
+                # if notification insert error, then '_id' will not be in it and we 
+                # then should ignore the notification
+                if '_id' in notification:
+                    notification_ids.append(notification.get('_id'))
+                    if ref == 'service':
+                        self._process_db_operation(self.services.update,
+                                                   {'_id': _id},
+                                                   {'$set': {'notification_ids': notification_ids}})
+                    elif ref == 'host':
+                        self._process_db_operation(self.hosts.update,
+                                                   {'_id': _id},
+                                                   {'$set': {'notification_ids': notification_ids}})
+        else:
+            logger.warn('[Mongodb-Notification-Broker] Update notification '
+                        'error. Notification id: %s' % _id)
     
     # The main function of mongodb_broker
     def _do_loop_turn(self):
