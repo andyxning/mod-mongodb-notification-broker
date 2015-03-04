@@ -1,27 +1,28 @@
 {
-  "name": "mod-mongodb-broker",
+  "name": "mod-mongodb-notification-broker",
   "types": ["module"],
   "version": "0.1.0",
-  "homepage": "http://github.com/andyxning/mod-mongodb-broker",
+  "homepage": "http://github.com/andyxning/mod-mongodb-notification-broker",
   "author": "Ning Xie",
-  "description": "Module used for Broker to relay broks received by Broker to a mongodb database",
+  "description": "Module used for Broker to relay notification broks received by Broker to a mongodb database",
   "contributors": [
     {
       "name": "Ning Xie",
       "email": "andy.xning@gmail.com"
     }
   ],
-  "repository": "https://github.com/andyxning/mod-mongodb-broker",
+  "repository": "https://github.com/andyxning/mod-mongodb-notification-broker",
   "keywords": [
-    "mod-mongodb-broker",
+    "mod-mongodb-notification-broker",
     "module",
     "broker",
     "mongodb",
     "mongo",
-    "database"
+    "database",
+    "notification"
   ],
   "dependencies": {
-    "shinken": ">=1.4"
+    "shinken": ">=2.2"
   },
   "license": "AGPL"
 }

@@ -82,7 +82,10 @@ class MongodbBroker(BaseModule):
         self.password = getattr(mod_conf,
                                 'password', 'shinken-broker_notification')
         self.url_options = getattr(mod_conf, 'url_options', '')
-        self.retry_per_log = int(getattr(mod_conf, 'retry_per_log', '50'))
+        try:
+            self.retry_per_log = int(getattr(mod_conf, 'retry_per_log'))
+        except:
+            self.retry_per_log = 50
         
         
     def _get_replica_set(self, replica_set_str):
