@@ -6,7 +6,7 @@ make reports later.
 
 ## Notications  
 There are two main problems if the database can not be connected and db(update,
- find operations can not be accomplished:  
+ find) operations can not be accomplished:  
 * if db(update, find) operations can not be accomplished due to mongodb is
 down or network problems, it will reconnect until db operation succeeds.
 * we store all the Notification broks in a queue, if the queue is full(in case 
