@@ -4,10 +4,11 @@
 # Author: ning.xie <andy.xning@qunar.com>
 # 
 
-import sys
 import time
 import Queue
-from threading import Thread, Event
+import traceback
+
+from threading import Thread
 
 try:
     from pymongo import MongoReplicaSetClient, MongoClient
@@ -25,7 +26,7 @@ from shinken.util import to_bool
 properties = {
               'daemons': ['broker'],
               'type': 'mongodb-notification-broker',
-              'external': False
+              'external': True
               }
 
 
@@ -45,7 +46,6 @@ class MongodbBroker(BaseModule):
         self._parse_conf(mod_conf)
         
         self.queue = Queue.Queue(self.queue_size)
-        self.read_event = Event()
         self.conn = None
         # service notification log broks. 
         # ref: service.raise_notification_log_entry
@@ -64,9 +64,7 @@ class MongodbBroker(BaseModule):
                                   'command',
                                   'output')
         
-        
     def _parse_conf(self, mod_conf):
-        logger.debug(mod_conf)
         self.high_availability = to_bool(getattr(mod_conf,
                                                  'high_availability', 'false'))
         if not self.high_availability:
@@ -79,33 +77,32 @@ class MongodbBroker(BaseModule):
                                 'Error')
         else:
             replica_set_str = getattr(mod_conf, 'replica_set', '')
-            self.replica_set = self._get_replica_set(replica_set_str)
+            self._set_replica_set(replica_set_str)
         self.database = getattr(mod_conf,
-                                'database', 'shinken_notification_broker')
+                                'database', 'shinken_broker_notification')
         self.username = getattr(mod_conf,
                                 'username', 'shinken_broker_notification')
         self.password = getattr(mod_conf,
-                                'password', 'shinken-broker_notification')
+                                'password', 'shinken_broker_notification')
         self.url_options = getattr(mod_conf, 'url_options', '')
+        
         try:
             self.retry_per_log = int(getattr(mod_conf, 'retry_per_log'))
         except:
-            self.retry_per_log = 1
+            self.retry_per_log = 5
         try:
             self.queue_size = int(getattr(mod_conf, 'queue_size'))
         except:
-            self.queue_size = 10000 
+            self.queue_size = 10000
         
-        
-    def _get_replica_set(self, replica_set_str):
+    def _set_replica_set(self, replica_set_str):
         raw_members = replica_set_str.split(',')
         members = []
         for member in raw_members:
             members.append(member.strip())
-        return members        
+        self.replica_set = members        
         
-        
-    def _get_mongodb_url(self):
+    def _set_mongodb_url(self):
         scheme = 'mongodb://'
         db_and_options = '/%s?%s' % (self.database, self.url_options) 
         credential = ':'.join((self.username, '%s@' % self.password))
@@ -115,24 +112,24 @@ class MongodbBroker(BaseModule):
         else:
             address = ','.join(self.replica_set)
             mongodb_url = ''.join((scheme, credential, address, db_and_options))
-        return mongodb_url
-        
+        self.mongodb_url = mongodb_url
         
     # Called by Broker to do init work
     def init(self):
         logger.info('[Mongodb-Notification-Broker] Initialization of '
                     'mongodb_notification_broker module')
-        mongodb_url = self._get_mongodb_url()
+        self._set_mongodb_url()
         logger.debug('[Mongodb-Notification-Broker] Mongodb connect url: %s' 
-                     % mongodb_url)
+                     % self.mongodb_url)
         
-        if self.conn:
-            self.do_stop()
+        # In case notification broker process down occasionally, the self.conn 
+        # object must be dropped cleanly in Broker daemon.
+        self.do_stop()
         try:
             if not self.high_availability:
-                self.conn = MongoClient(mongodb_url)
+                self.conn = MongoClient(self.mongodb_url)
             else:
-                self.conn = MongoReplicaSetClient(mongodb_url)
+                self.conn = MongoReplicaSetClient(self.mongodb_url)
         except ConnectionFailure:
             logger.warn('[Mongodb-Notification-Broker] Can not make connection '
                         ' with MongoDB')
@@ -142,13 +139,9 @@ class MongodbBroker(BaseModule):
             logger.warn('[Mongodb-Notification-Broker] Mongodb connect url '
                         'error')
             logger.warn('[Mongodb-Notification-Broker] Mongodb connect url: %s' 
-                        % mongodb_url)
+                        % self.mongodb_url)
             raise 
         self._get_collections()
-        worker = Thread(target=self._main)
-        worker.setDaemon(True)
-        worker.start()
-        
         
     def _get_collections(self):
         db = self.conn[self.database]
@@ -156,12 +149,11 @@ class MongodbBroker(BaseModule):
         self.services = db['services']
         self.notifications = db['notifications']
     
-    
-    # Override the same function in basemodule.py
+    # Override the same function in basemodule.py for clean up 
     def do_stop(self):
-        self.conn.close()
-        self.conn = None
-    
+        if self.conn:
+            self.conn.close()
+            self.conn = None
     
     # If we are confronted with AutoReconnect Exception, then we should always 
     # retry until the operation succeeds. However, if other exception is thrown,
@@ -180,12 +172,13 @@ class MongodbBroker(BaseModule):
             except Exception:
                 logger.warn('[Mongodb-Notification-Broker] Update error. '
                             'operation %s, param %s' % (operation, param))
-                logger.warn(sys.exc_info()[:-1])
+                logger.warn('[Mongodb-Notification-Broker] %s' % traceback.format_exc())
                 break
             else:
+                logger.debug('[Mongodb-Notification-Broker] Update success. '
+                             'Operation %s, param %s' % (operation, param))
                 break
         return result    
-    
     
     # main function to update mongodb database
     def _save(self, ref, ref_identity, notification):
@@ -201,7 +194,7 @@ class MongodbBroker(BaseModule):
         
         # if service or host find error, 'cursor' will be None.
         # then we can not make sure that whether specific host or service 
-        # exists. In order to not make data be wrong, we stop here.
+        # exists. In order to not make data be corrupted, we should stop here.
         if cursor:
             if not cursor.count():
                 # if notification insert error, then '_id' will not be in it and we
@@ -228,34 +221,40 @@ class MongodbBroker(BaseModule):
                     elif ref == 'host':
                         self._process_db_operation(self.hosts.update,
                                                    {'_id': _id},
-                                                   {'$set': {'notification_ids': notification_ids}})
+                                                   {'$set': {'notification_ids': notification_ids}})    
         else:
             logger.warn('[Mongodb-Notification-Broker] Update notification '
-                        'success, link error. Notification id: %s' % _id)
+                        'success, link with host or service error.')
+        logger.debug('[Mongodb-Notification-Broker] Update notification ends.')    
+        
     
-    
-    # The main function of mongodb_broker
+    # restore 'log' type notification to self.queue
     def _do_loop_turn(self):
-        self.read_event.wait()
-        try:
-            brok = self.queue.get_nowait()
-        except Queue.Empty:
-            self.read_event.clear()
-            return 
-
-        msg = brok.data['log']
-        parts = msg.split(':', 1)
-        if 'SERVICE' in parts[0]:
-            service_identiry, notification = self._process_notification_brok('service',
-                                                                             self.service_notification,
-                                                                             parts[1])
-            self._save('service', service_identiry, notification)
-        elif 'HOST' in parts[0]:
-            host_identity, notification = self._process_notification_brok('host',
-                                                                          self.host_notification,
-                                                                          parts[1])
-            self._save('host', host_identity, notification)
-
+        while True:
+            broks = self.to_q.get()
+            for brok in broks:
+                brok.prepare()
+                self._manage_brok(brok)
+    
+    def _update_db(self):
+        while True:
+            # if self.queue is empty, get operation will be blocked.
+            brok = self.queue.get()
+            logger.debug('[Mongodb-Notification-Broker] '
+                         'Update notification begins.')
+            
+            msg = brok.data['log']
+            parts = msg.split(':', 1)
+            if 'SERVICE' in parts[0]:
+                service_identiry, notification = self._process_notification_brok('service',
+                                                                                 self.service_notification,
+                                                                                 parts[1])
+                self._save('service', service_identiry, notification)
+            elif 'HOST' in parts[0]:
+                host_identity, notification = self._process_notification_brok('host',
+                                                                              self.host_notification,
+                                                                              parts[1])
+                self._save('host', host_identity, notification)
 
     def _process_notification_brok(self, ref, keys, notification_info):
         elts = notification_info.split(';', len(keys))
@@ -273,20 +272,18 @@ class MongodbBroker(BaseModule):
                         }
         return ref_identity, notification
     
-    
-    # invoked by Broker daemon
-    def manage_brok(self, brok):
+    def _manage_brok(self, brok):
         if brok.type == 'log' and 'NOTIFICATION' in brok.data['log']:
             try:
                 self.queue.put_nowait(brok)
-                if not self.read_event.is_set():
-                    self.read_event.set()
             except Queue.Full:
-                logger.warn('[Mongodb-Notification-Broker] Queue full. Ignored '
-                            'brok: %s' % brok.data)
-                
-                
-    def _main(self):
-        logger.debug('[Mongodb-Notification-Broker] Start main function')
-        while True:
-            self._do_loop_turn()
+                logger.warn('[Mongodb-Notification-Broker] Queue full. '
+                            'Ignore broks.')
+        
+    # invoked by basemodule._main        
+    def main(self):
+        logger.info('[Mongodb-Notification-Broker] Start main function.')
+        worker = Thread(target=self._update_db)
+        worker.setDaemon(True)
+        worker.start()
+        self._do_loop_turn()
