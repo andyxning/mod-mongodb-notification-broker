@@ -1,7 +1,7 @@
 {
   "name": "mod-mongodb-notification-broker",
   "types": ["module"],
-  "version": "0.1.0",
+  "version": "0.2.0",
   "homepage": "http://github.com/andyxning/mod-mongodb-notification-broker",
   "author": "Ning Xie",
   "description": "Module used for Broker to relay notification broks received by Broker to a mongodb database",
