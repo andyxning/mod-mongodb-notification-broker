@@ -4,6 +4,7 @@
 # Author: ning.xie <andy.xning@qunar.com>
 # 
 
+import re
 import time
 import Queue
 import traceback
@@ -63,6 +64,8 @@ class MongodbBroker(BaseModule):
                                   'state',
                                   'command',
                                   'output')
+        
+        self.timestamp_regex = re.compile('.*\[(?P<timestamp>\d+)\].*')
         
     def _parse_conf(self, mod_conf):
         self.high_availability = to_bool(getattr(mod_conf,
@@ -248,16 +251,22 @@ class MongodbBroker(BaseModule):
             if 'SERVICE' in parts[0]:
                 service_identiry, notification = self._process_notification_brok('service',
                                                                                  self.service_notification,
-                                                                                 parts[1])
+                                                                                 parts[0], parts[1])
                 self._save('service', service_identiry, notification)
             elif 'HOST' in parts[0]:
                 host_identity, notification = self._process_notification_brok('host',
                                                                               self.host_notification,
-                                                                              parts[1])
+                                                                              parts[0], parts[1])
                 self._save('host', host_identity, notification)
 
-    def _process_notification_brok(self, ref, keys, notification_info):
+    def _process_notification_brok(self, ref, keys, header, notification_info):
         elts = notification_info.split(';', len(keys))
+        
+        timestamp = ''
+        match = self.timestamp_regex.match(header)
+        if match:
+            timestamp = match.group('timestamp')
+        
         info_map = dict(zip(keys, elts))
         if ref == 'service':
             ref_identity = {'host': info_map.get('host'),
@@ -268,7 +277,8 @@ class MongodbBroker(BaseModule):
             
         notification = {'contact': info_map.get('contact'),
                         'command': info_map.get('command'),
-                        'output': info_map.get('output')
+                        'output': info_map.get('output'),
+                        'timestamp': timestamp
                         }
         return ref_identity, notification
     
