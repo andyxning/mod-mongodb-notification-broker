@@ -230,7 +230,7 @@ class MongodbBroker(BaseModule):
     
     # restore 'log' type notification to self.queue
     def _do_loop_turn(self):
-        while True:
+        while not self.interrupted:
             broks = self.to_q.get()
             for brok in broks:
                 brok.prepare()
